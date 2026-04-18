@@ -1,0 +1,688 @@
+openapi: 3.0.3
+info:
+  title: Smart Web Scraper API
+  description: 지능형 웹 데이터 수집 플랫폼 — 5단계 적응형 파이프라인 + Self-Healing
+  version: 1.0.0
+  contact:
+    name: Smart Web Scraper
+servers:
+  - url: http://localhost:8000
+    description: Local development
+
+tags:
+  - name: Auth
+  - name: URLs
+  - name: Scrape
+  - name: Schedules
+  - name: Dashboard
+  - name: History
+
+paths:
+  # ─── Auth ─────────────────────────────────────────────────
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: 로그인 (JWT 발급)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string }
+                password: { type: string }
+      responses:
+        "200":
+          description: 로그인 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token: { type: string }
+                  refresh_token: { type: string }
+                  token_type: { type: string, example: bearer }
+        "401":
+          description: 인증 실패
+
+  /api/v1/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Access Token 재발급
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        "200": { description: 재발급 성공 }
+        "401": { description: 유효하지 않은 refresh token }
+
+  /api/v1/auth/logout:
+    post:
+      tags: [Auth]
+      summary: 로그아웃
+      responses:
+        "204": { description: 로그아웃 성공 }
+
+  # ─── URLs ─────────────────────────────────────────────────
+  /api/v1/urls:
+    get:
+      tags: [URLs]
+      summary: URL 목록 조회
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: size
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: category
+          in: query
+          schema: { type: string }
+        - name: is_active
+          in: query
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: URL 목록
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/UrlResponse" }
+                  total: { type: integer }
+                  page: { type: integer }
+                  pages: { type: integer }
+
+    post:
+      tags: [URLs]
+      summary: URL 등록 (단일 또는 일괄)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/UrlCreate"
+                - $ref: "#/components/schemas/BulkUrlCreate"
+      responses:
+        "201": { description: 등록 성공 }
+        "403": { description: robots.txt 차단 }
+        "409": { description: 중복 URL }
+        "422": { description: 유효하지 않은 URL }
+
+  /api/v1/urls/import:
+    post:
+      tags: [URLs]
+      summary: CSV 파일로 URL 일괄 등록
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: 가져오기 결과
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  imported: { type: integer }
+                  errors: { type: array, items: { type: string } }
+
+  /api/v1/urls/{id}:
+    get:
+      tags: [URLs]
+      summary: URL 상세 조회
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UrlResponse" }
+        "404": { description: URL 없음 }
+
+    put:
+      tags: [URLs]
+      summary: URL 수정
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UrlUpdate" }
+      responses:
+        "200": { description: 수정 성공 }
+
+    delete:
+      tags: [URLs]
+      summary: URL 삭제
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: 삭제 성공 }
+
+  # ─── Scrape ───────────────────────────────────────────────
+  /api/v1/scrape/now:
+    post:
+      tags: [Scrape]
+      summary: 즉시 수집 트리거
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url_id]
+              properties:
+                url_id: { type: string, format: uuid }
+                pipeline_override: { type: string, enum: [api, http, stealth, ai, proxy] }
+      responses:
+        "202":
+          description: 수집 태스크 시작됨
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task_id: { type: string }
+                  status: { type: string }
+
+  /api/v1/scrape/bulk:
+    post:
+      tags: [Scrape]
+      summary: 복수 URL 일괄 수집
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url_ids]
+              properties:
+                url_ids:
+                  type: array
+                  items: { type: string, format: uuid }
+                  maxItems: 50
+      responses:
+        "202": { description: 일괄 수집 시작됨 }
+
+  /api/v1/scrape/{task_id}/status:
+    get:
+      tags: [Scrape]
+      summary: 태스크 상태 조회
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task_id: { type: string }
+                  status: { type: string, enum: [pending, running, completed, failed] }
+                  result: { $ref: "#/components/schemas/ScrapeResult" }
+
+  /api/v1/scrape/{task_id}/cancel:
+    post:
+      tags: [Scrape]
+      summary: 태스크 취소
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: 취소됨 }
+
+  # ─── Schedules ────────────────────────────────────────────
+  /api/v1/schedules:
+    get:
+      tags: [Schedules]
+      summary: 스케줄 목록
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ScheduleResponse" }
+
+    post:
+      tags: [Schedules]
+      summary: 스케줄 등록
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ScheduleCreate" }
+      responses:
+        "201": { description: 등록 성공 }
+
+  /api/v1/schedules/{id}:
+    put:
+      tags: [Schedules]
+      summary: 스케줄 수정
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: 수정 성공 }
+
+    delete:
+      tags: [Schedules]
+      summary: 스케줄 삭제
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: 삭제 성공 }
+
+  /api/v1/schedules/{id}/pause:
+    post:
+      tags: [Schedules]
+      summary: 스케줄 일시정지
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: 일시정지됨 }
+
+  /api/v1/schedules/{id}/resume:
+    post:
+      tags: [Schedules]
+      summary: 스케줄 재개
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: 재개됨 }
+
+  /api/v1/schedules/{id}/run:
+    post:
+      tags: [Schedules]
+      summary: 스케줄 즉시 실행
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "202": { description: 실행 시작됨 }
+
+  # ─── Dashboard ────────────────────────────────────────────
+  /api/v1/dashboard/summary:
+    get:
+      tags: [Dashboard]
+      summary: KPI 요약
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_urls: { type: integer }
+                  active_urls: { type: integer }
+                  success_rate: { type: number, format: float }
+                  today_items: { type: integer }
+
+  /api/v1/dashboard/success-rate:
+    get:
+      tags: [Dashboard]
+      summary: 성공률 추이
+      parameters:
+        - name: days
+          in: query
+          schema: { type: integer, default: 30 }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    date: { type: string, format: date }
+                    success_rate: { type: number }
+
+  /api/v1/dashboard/pipeline-stats:
+    get:
+      tags: [Dashboard]
+      summary: 파이프라인별 사용 통계
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    pipeline: { type: string }
+                    count: { type: integer }
+
+  /api/v1/dashboard/category-stats:
+    get:
+      tags: [Dashboard]
+      summary: 카테고리별 성공률
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    category: { type: string }
+                    success_rate: { type: number }
+
+  /api/v1/dashboard/alerts:
+    get:
+      tags: [Dashboard]
+      summary: 알림 목록
+      parameters:
+        - name: is_read
+          in: query
+          schema: { type: boolean }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AlertResponse" }
+
+  /api/v1/dashboard/alerts/{id}/read:
+    put:
+      tags: [Dashboard]
+      summary: 알림 읽음 처리
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: 읽음 처리됨 }
+
+  /api/v1/dashboard/alerts/read-all:
+    post:
+      tags: [Dashboard]
+      summary: 모든 알림 읽음 처리
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updated: { type: integer }
+
+  /api/v1/dashboard/schedules/upcoming:
+    get:
+      tags: [Dashboard]
+      summary: 다음 실행 예정 스케줄
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ScheduleResponse" }
+
+  # ─── History ──────────────────────────────────────────────
+  /api/v1/history:
+    get:
+      tags: [History]
+      summary: 방문 이력 목록
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: size
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: url_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: success
+          in: query
+          schema: { type: boolean }
+        - name: pipeline_name
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/VisitLogResponse" }
+                  total: { type: integer }
+                  pages: { type: integer }
+
+  /api/v1/history/export:
+    get:
+      tags: [History]
+      summary: 방문 이력 내보내기 (CSV / JSON)
+      parameters:
+        - name: format
+          in: query
+          schema: { type: string, enum: [csv, json], default: csv }
+        - name: url_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: 파일 다운로드
+          content:
+            text/csv:
+              schema: { type: string }
+            application/json:
+              schema: { type: array }
+
+  /api/v1/history/{id}:
+    get:
+      tags: [History]
+      summary: 방문 이력 상세
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VisitLogResponse" }
+        "404": { description: 이력 없음 }
+
+  # ─── WebSocket ────────────────────────────────────────────
+  /ws/live-feed:
+    get:
+      tags: [Dashboard]
+      summary: 실시간 방문 피드 (WebSocket)
+      description: |
+        WebSocket 연결. 각 방문 이벤트는 JSON 형식으로 푸시됩니다.
+        ```json
+        { "url": "...", "success": true, "pipeline_name": "http", "duration_ms": 250 }
+        ```
+      responses:
+        "101": { description: WebSocket 업그레이드 }
+
+components:
+  schemas:
+    UrlCreate:
+      type: object
+      required: [url]
+      properties:
+        url: { type: string, format: uri }
+        name: { type: string }
+        category: { type: string }
+        extraction_schema: { type: object }
+        tags: { type: array, items: { type: string } }
+
+    BulkUrlCreate:
+      type: object
+      required: [urls]
+      properties:
+        urls:
+          type: array
+          items:
+            type: object
+            required: [url]
+            properties:
+              url: { type: string, format: uri }
+              name: { type: string }
+
+    UrlUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        is_active: { type: boolean }
+        extraction_schema: { type: object }
+        tags: { type: array, items: { type: string } }
+
+    UrlResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        url: { type: string }
+        name: { type: string }
+        domain: { type: string }
+        category: { type: string }
+        is_active: { type: boolean }
+        tags: { type: array, items: { type: string } }
+        created_at: { type: string, format: date-time }
+        profile: { $ref: "#/components/schemas/UrlProfile" }
+
+    UrlProfile:
+      type: object
+      properties:
+        best_pipeline: { type: string }
+        success_rate: { type: number }
+        total_visits: { type: integer }
+        avg_response_time_ms: { type: number }
+        requires_js: { type: boolean }
+        has_antibot: { type: boolean }
+        antibot_type: { type: string }
+
+    ScrapeResult:
+      type: object
+      properties:
+        url: { type: string }
+        success: { type: boolean }
+        pipeline_name: { type: string }
+        data: { type: object }
+        duration_ms: { type: integer }
+        error_type: { type: string }
+        error_message: { type: string }
+        healing_applied: { type: boolean }
+
+    ScheduleCreate:
+      type: object
+      required: [url_id, cron_expression]
+      properties:
+        url_id: { type: string, format: uuid }
+        schedule_type: { type: string, enum: [hourly, daily, weekly, monthly, custom] }
+        cron_expression: { type: string, example: "0 9 * * *" }
+        timezone: { type: string, default: Asia/Seoul }
+
+    ScheduleResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        url_id: { type: string, format: uuid }
+        schedule_type: { type: string }
+        cron_expression: { type: string }
+        is_active: { type: boolean }
+        next_run_at: { type: string, format: date-time }
+        run_count: { type: integer }
+        success_count: { type: integer }
+
+    VisitLogResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        url: { type: string }
+        visited_at: { type: string, format: date-time }
+        success: { type: boolean }
+        pipeline_name: { type: string }
+        duration_ms: { type: integer }
+        status_code: { type: integer }
+        error_type: { type: string }
+        error_message: { type: string }
+        pipelines_attempted: { type: array, items: { type: string } }
+        content_size_bytes: { type: integer }
+        items_extracted: { type: integer }
+        content_hash: { type: string }
+        antibot_detected: { type: string }
+        captcha_encountered: { type: boolean }
+        healing_applied: { type: boolean }
+        healing_type: { type: string }
+        method_details: { type: object }
+
+    AlertResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        severity: { type: string, enum: [info, warning, error, critical] }
+        alert_type: { type: string }
+        message: { type: string }
+        is_read: { type: boolean }
+        created_at: { type: string, format: date-time }

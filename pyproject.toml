@@ -1,0 +1,103 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "smart-web-scraper"
+version = "0.1.0"
+description = "Smart Web Scraper with Adaptive Healing — Korean market focused autonomous web data collection platform"
+requires-python = ">=3.12"
+dependencies = [
+    # Web Framework
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.6.0",
+    "python-multipart>=0.0.18",
+    "websockets>=14.0",
+    "orjson>=3.10.0",
+
+    # HTTP Clients
+    "httpx[http2]>=0.28.0",
+    "curl-cffi>=0.7.0",
+
+    # HTML Parsing
+    "beautifulsoup4>=4.12.0",
+    "lxml>=5.3.0",
+    "selectolax>=0.3.0",
+    "feedparser>=6.0.0",
+
+    # Browser Automation
+    "playwright>=1.49.0",
+
+    # AI Crawling & LLM
+    "crawl4ai>=0.4.0",
+    "ollama>=0.4.0",
+
+    # Database
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30.0",
+    "alembic>=1.14.0",
+
+    # Task Queue & Scheduling
+    "celery[redis]>=5.4.0",
+    "apscheduler>=3.10.0",
+    "redis>=5.2.0",
+    "croniter>=5.0.0",
+
+    # Security
+    "cryptography>=44.0.0",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.0",
+
+    # Logging & Monitoring
+    "structlog>=24.4.0",
+
+    # Utilities
+    "python-dotenv>=1.0.0",
+    "tenacity>=9.0.0",
+    "xxhash>=3.5.0",
+
+    # Notifications
+    "slack-sdk>=3.33.0",
+    "aiosmtplib>=3.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "pytest-mock>=3.14.0",
+    "factory-boy>=3.3.0",
+    "respx>=0.22.0",
+    "ruff>=0.8.0",
+    "mypy>=1.13.0",
+    "pre-commit>=4.0.0",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["backend"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "--cov=backend --cov-report=term-missing"
+
+[tool.coverage.run]
+source = ["backend"]
+omit = ["*/migrations/*", "*/tests/*"]

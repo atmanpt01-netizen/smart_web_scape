@@ -1,0 +1,52 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+*.so
+*.pyd
+
+# Alembic generated (keep versions tracked)
+# alembic/versions/
+
+# Environment
+.env
+*.env.local
+
+# Database
+*.db
+*.sqlite3
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Test/Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Playwright
+.playwright-mcp/
+
+# Screenshots
+*.png

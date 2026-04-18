@@ -1,0 +1,47 @@
+# ─── Builder stage ─────────────────────────────────────────
+FROM python:3.12-slim AS builder
+
+WORKDIR /app
+
+# Install uv
+RUN pip install uv
+
+# Copy dependency files
+COPY pyproject.toml ./
+
+# Install dependencies
+RUN uv pip install --system --no-cache -e .
+
+# Install Playwright browsers
+RUN playwright install chromium --with-deps
+
+# ─── Runtime stage ─────────────────────────────────────────
+FROM python:3.12-slim AS runtime
+
+WORKDIR /app
+
+# Create non-root user
+RUN useradd -m -u 1000 scraper
+
+# Copy installed packages from builder
+COPY --from=builder /usr/local/lib/python3.12 /usr/local/lib/python3.12
+COPY --from=builder /usr/local/bin /usr/local/bin
+COPY --from=builder /root/.cache/ms-playwright /home/scraper/.cache/ms-playwright
+
+# Copy application code
+COPY backend/ ./backend/
+COPY alembic/ ./alembic/
+COPY alembic.ini ./
+
+# Install Playwright system dependencies (runtime)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libglib2.0-0 libnss3 libatk1.0-0 libatk-bridge2.0-0 \
+    libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
+    libxfixes3 libxrandr2 libgbm1 libasound2 \
+    && rm -rf /var/lib/apt/lists/*
+
+USER scraper
+
+EXPOSE 8000
+
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
